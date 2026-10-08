@@ -70,7 +70,8 @@ Nothing is patched or forked.
 - Node.js 20.6 or newer.
 - An MCP server behind a WSO2 AI Gateway with the MCP Authentication policy and
   the ID-JAG policy attached in `id_token` mode.
-- Optionally an Anthropic API key for the chat loop. Without it the client still
+- Optionally, for the chat loop, either an Anthropic proxy on the same gateway
+  with an API key for it, or an Anthropic API key. Without one the client still
   connects, lists tools and calls them with `/call`.
 
 ## Authorization server setup
@@ -135,8 +136,20 @@ callback port, so no extra build step or port.
    Hover a 401 to see the gateway's `WWW-Authenticate` value.
 
 The UI binds to `127.0.0.1` only and has no authentication of its own; it is a
-single-user local app. Chat needs `ANTHROPIC_API_KEY`; without it the session,
+single-user local app. Chat needs an LLM route (below); without one the session,
 tools and trace panels still work.
+
+### LLM route
+
+The assistant's model calls can go through the gateway as well, so that both the
+tool traffic and the LLM traffic of the application are governed in one place.
+Set `LLM_PROXY_URL` to an Anthropic proxy on the gateway and `LLM_PROXY_API_KEY`
+to an API key for it. The client sends that key on `X-API-Key`, which is the
+same header the Anthropic SDK uses for its own key, so the SDK is simply pointed
+at the proxy and the gateway swaps in the real Anthropic key upstream. Those
+calls appear in the request trace tagged `LLM`.
+
+When `LLM_PROXY_URL` is empty, `ANTHROPIC_API_KEY` calls Anthropic directly.
 
 ### Terminal mode
 
@@ -174,7 +187,9 @@ See [.env.example](.env.example) for the full list.
 | `MCP_AUTH_SERVER_METADATA_URL` | Optional authorization server metadata document that takes precedence over discovery |
 | `MCP_SCOPES` | Fallback scope when neither the challenge nor the resource metadata names any; default `openid` |
 | `ID_TOKEN_HEADER` | Header carrying the ID token; default `X-ID-Token` |
-| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Chat; optional |
+| `LLM_PROXY_URL`, `LLM_PROXY_API_KEY` | Chat through the gateway's Anthropic proxy; the key is sent on `X-API-Key` |
+| `ANTHROPIC_API_KEY` | Chat directly against Anthropic, used only when `LLM_PROXY_URL` is empty |
+| `ANTHROPIC_MODEL` | Model for either route; default `claude-sonnet-5-5` |
 | `CALLBACK_PORT` | Local port for the redirect URL and the web UI; default `8765` |
 | `LOG_HTTP` | `false` to silence per-request logging |
 

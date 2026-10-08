@@ -20,6 +20,8 @@ export interface SessionStatus {
   serverUrl: string;
   idTokenHeader: string;
   model: string;
+  /** Where chat requests go, when chat is enabled. */
+  llm?: { via: 'gateway' | 'direct'; url?: string };
 }
 
 /**
@@ -68,10 +70,12 @@ export class App {
       await this.mcp.connect();
       this.tools = await this.mcp.listTools();
       log.ok(`${this.tools.length} tool(s) available: ${this.tools.map(t => t.name).join(', ') || 'none'}`);
-      if (this.config.chat.apiKey) {
-        this.chat = new Chat(this.config.chat.apiKey, this.config.chat.model, this.tools, (n, a) => this.callTool(n, a));
+      if (this.config.chat.llm) {
+        this.chat = new Chat(this.config.chat, this.tools, (n, a) => this.callTool(n, a), this.config.logHttp);
+        const llm = this.config.chat.llm;
+        log.info(llm.via === 'gateway' ? `chat: ${this.config.chat.model} via the gateway at ${llm.baseUrl}` : `chat: ${this.config.chat.model} direct to Anthropic`);
       } else {
-        log.warn('ANTHROPIC_API_KEY is not set; chat is disabled, direct tool calls still work');
+        log.warn('neither LLM_PROXY_URL nor ANTHROPIC_API_KEY is set; chat is disabled, direct tool calls still work');
       }
       this.setState('connected');
     } catch (err) {
@@ -98,6 +102,9 @@ export class App {
       serverUrl: this.config.mcp.serverUrl.toString(),
       idTokenHeader: this.config.mcp.idTokenHeader,
       model: this.config.chat.model,
+      llm: this.config.chat.llm
+        ? { via: this.config.chat.llm.via, url: this.config.chat.llm.via === 'gateway' ? this.config.chat.llm.baseUrl.toString() : undefined }
+        : undefined,
     };
   }
 
@@ -112,7 +119,7 @@ export class App {
   /** Runs one chat turn. Output arrives on the event bus. */
   async send(message: string): Promise<void> {
     if (!this.chat) {
-      throw new Error('chat is disabled: ANTHROPIC_API_KEY is not set');
+      throw new Error('chat is disabled: set LLM_PROXY_URL or ANTHROPIC_API_KEY');
     }
     if (this.busy) {
       throw new Error('a turn is already in progress');

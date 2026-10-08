@@ -139,6 +139,7 @@
       const cls = ev.status < 300 ? 'ok' : ev.status === 401 || ev.status >= 500 ? 'bad' : 'other';
       el.innerHTML = `<span class="st ${cls}">${ev.status}</span><span>${esc(ev.method)}</span>` +
         (ev.idTokenSent ? `<span class="tag">${esc(status.idTokenHeader || 'ID token')}</span>` : '') +
+        (ev.target === 'llm' ? '<span class="tag">LLM</span>' : '') +
         `<span class="path">${esc(ev.rpc ? ev.rpc + ' ' : '')}${esc(ev.path)}</span>`;
       if (ev.challenge) el.title = ev.challenge;
     }
@@ -160,7 +161,7 @@
     $('reset').hidden = s.state !== 'connected';
     const user = $('user');
     if (s.user) { user.hidden = false; user.textContent = s.user.name || s.user.email || s.user.sub || ''; } else { user.hidden = true; }
-    input.placeholder = s.state !== 'connected' ? 'Sign in to start' : s.chatEnabled ? 'Ask about a customer\'s tickets…' : 'Chat disabled: ANTHROPIC_API_KEY not set. Tools can still be called from the Tools panel.';
+    input.placeholder = s.state !== 'connected' ? 'Sign in to start' : s.chatEnabled ? 'Ask about a customer\'s tickets…' : 'Chat disabled: set LLM_PROXY_URL or ANTHROPIC_API_KEY. Tools can still be called from the Tools panel.';
     setBusy(false);
 
     const session = document.querySelector('#session .body');
@@ -168,7 +169,7 @@
       const tok = (label, t) => !t ? '' : t.opaque
         ? `<dt>${label}</dt><dd>opaque token (${t.length} chars)</dd>`
         : `<dt>${label}</dt><dd>${esc(String(t.sub || ''))}</dd><dt>audience</dt><dd>${[].concat(t.aud || []).map(a => `<span class="aud">${esc(a)}</span>`).join('')}</dd><dt>expires</dt><dd>${esc(String(t.exp || ''))}</dd>`;
-      session.innerHTML = `<dl>${tok('access token', s.tokens.accessToken)}${tok('ID token', s.tokens.idToken)}<dt>sent on</dt><dd>${esc(s.idTokenHeader)}</dd><dt>MCP server</dt><dd>${esc(s.serverUrl)}</dd><dt>model</dt><dd>${esc(s.model)}</dd></dl>`;
+      session.innerHTML = `<dl>${tok('access token', s.tokens.accessToken)}${tok('ID token', s.tokens.idToken)}<dt>sent on</dt><dd>${esc(s.idTokenHeader)}</dd><dt>MCP server</dt><dd>${esc(s.serverUrl)}</dd><dt>model</dt><dd>${esc(s.model)}${s.llm ? (s.llm.via === 'gateway' ? ` via the gateway<br><span class="path">${esc(s.llm.url)}</span>` : ' direct to Anthropic') : ' (chat disabled)'}</dd></dl>`;
     } else if (s.state === 'error') {
       session.innerHTML = `<div class="empty">${esc(s.error || 'failed')}</div>`;
     }

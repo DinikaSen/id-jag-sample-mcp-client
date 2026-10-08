@@ -12,7 +12,7 @@ test('defaults: dynamic public client, discovery, openid fallback scope, X-ID-To
   assert.equal(config.mcp.scopes, 'openid');
   assert.equal(config.mcp.redirectUrl, 'http://localhost:8765/callback');
   assert.equal(config.mcp.idTokenHeader, 'X-ID-Token');
-  assert.equal(config.chat.apiKey, undefined);
+  assert.equal(config.chat.llm, undefined);
   assert.equal(config.logHttp, true);
 });
 
@@ -38,4 +38,16 @@ test('pre-registered confidential client with overrides', () => {
 
 test('missing required values name the variable', () => {
   assert.throws(() => loadConfig({}), /MCP_SERVER_URL is required/);
+});
+
+test('chat goes through the gateway when LLM_PROXY_URL is set, else direct with ANTHROPIC_API_KEY', () => {
+  const direct = loadConfig({ ...base, ANTHROPIC_API_KEY: 'sk-ant' });
+  assert.deepEqual(direct.chat.llm, { via: 'direct', apiKey: 'sk-ant' });
+
+  const proxied = loadConfig({ ...base, ANTHROPIC_API_KEY: 'sk-ant', LLM_PROXY_URL: 'https://gateway.example/anthropic', LLM_PROXY_API_KEY: 'gw-key' });
+  assert.equal(proxied.chat.llm?.via, 'gateway');
+  assert.equal(proxied.chat.llm?.apiKey, 'gw-key');
+  assert.equal(proxied.chat.llm?.via === 'gateway' && proxied.chat.llm.baseUrl.toString(), 'https://gateway.example/anthropic');
+
+  assert.throws(() => loadConfig({ ...base, LLM_PROXY_URL: 'https://gateway.example/anthropic' }), /LLM_PROXY_API_KEY/);
 });

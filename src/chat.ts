@@ -2,6 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import type { MessageParam, Tool as AnthropicTool, ToolResultBlockParam } from '@anthropic-ai/sdk/resources/messages/messages.js';
 import type { Tool as McpTool } from '@modelcontextprotocol/sdk/types.js';
 import type { ToolCallOutcome } from './mcp.js';
+import type { ChatConfig } from './config.js';
 import { bus } from './events.js';
 import { log } from './log.js';
 
@@ -12,19 +13,47 @@ const SYSTEM_PROMPT =
 
 const MAX_TOOL_ROUNDS = 12;
 
+/** Reports each model call on the bus so the trace shows LLM traffic beside MCP traffic. */
+function tracingFetch(via: 'gateway' | 'direct', logHttp: boolean): typeof fetch {
+  return async (input, init) => {
+    const response = await fetch(input, init);
+    const url = new URL(input instanceof Request ? input.url : input);
+    const method = init?.method ?? 'POST';
+    const path = `${url.origin}${url.pathname}`;
+    if (logHttp) {
+      log.http(`${method} ${path} (LLM ${via === 'gateway' ? 'via gateway' : 'direct'}) -> ${response.status}`);
+    }
+    bus.emitEvent({ type: 'http', target: 'llm', method, path, idTokenSent: false, status: response.status });
+    return response;
+  };
+}
+
 /** Minimal tool-use loop: one user turn may run several tool rounds before the final answer. */
 export class Chat {
   private readonly anthropic: Anthropic;
   private history: MessageParam[] = [];
   private readonly tools: AnthropicTool[];
 
+  private readonly model: string;
+
   constructor(
-    apiKey: string,
-    private readonly model: string,
+    config: ChatConfig,
     mcpTools: McpTool[],
     private readonly callTool: (name: string, args: Record<string, unknown>) => Promise<ToolCallOutcome>,
+    logHttp = true,
   ) {
-    this.anthropic = new Anthropic({ apiKey });
+    const llm = config.llm;
+    if (!llm) {
+      throw new Error('chat is disabled: set LLM_PROXY_URL or ANTHROPIC_API_KEY');
+    }
+    this.model = config.model;
+    // Through the gateway, the SDK's own x-api-key header carries the gateway key
+    // (header names are case-insensitive); the gateway swaps in the Anthropic key.
+    this.anthropic = new Anthropic({
+      apiKey: llm.apiKey,
+      baseURL: llm.via === 'gateway' ? llm.baseUrl.toString().replace(/\/$/, '') : undefined,
+      fetch: tracingFetch(llm.via, logHttp),
+    });
     this.tools = mcpTools.map(tool => ({
       name: tool.name,
       description: tool.description,

@@ -19,8 +19,13 @@ export interface McpConfig {
   idTokenHeader: string;
 }
 
+/** Where chat requests go. Undefined disables chat. */
+export type LlmRoute =
+  | { via: 'gateway'; baseUrl: URL; apiKey: string }
+  | { via: 'direct'; apiKey: string };
+
 export interface ChatConfig {
-  apiKey?: string;
+  llm?: LlmRoute;
   model: string;
 }
 
@@ -46,12 +51,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       idTokenHeader: env.ID_TOKEN_HEADER?.trim() || 'X-ID-Token',
     },
     chat: {
-      apiKey: blankToUndefined(env.ANTHROPIC_API_KEY),
+      llm: llmRoute(env),
       model: env.ANTHROPIC_MODEL?.trim() || 'claude-sonnet-5-5',
     },
     callbackPort,
     logHttp: (env.LOG_HTTP ?? 'true').toLowerCase() !== 'false',
   };
+}
+
+/**
+ * LLM_PROXY_URL sends chat through the gateway's Anthropic proxy, authenticated with
+ * LLM_PROXY_API_KEY on X-API-Key; the gateway holds the Anthropic key. Without it,
+ * ANTHROPIC_API_KEY calls Anthropic directly.
+ */
+function llmRoute(env: NodeJS.ProcessEnv): LlmRoute | undefined {
+  const proxyUrl = blankToUndefined(env.LLM_PROXY_URL);
+  if (proxyUrl) {
+    return { via: 'gateway', baseUrl: new URL(proxyUrl), apiKey: required(env, 'LLM_PROXY_API_KEY') };
+  }
+  const apiKey = blankToUndefined(env.ANTHROPIC_API_KEY);
+  return apiKey ? { via: 'direct', apiKey } : undefined;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
