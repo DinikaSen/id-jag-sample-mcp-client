@@ -4,6 +4,9 @@ import { log } from './log.js';
 /** Prints the URL and tries to open it in the default browser. Printing is the fallback. */
 export function openInBrowser(url: URL, purpose: string): void {
   log.info(`${purpose}. If the browser does not open, visit:\n  ${url.toString()}`);
+  if (process.env.NO_BROWSER) {
+    return;
+  }
   const [cmd, args] =
     process.platform === 'darwin'
       ? ['open', [url.toString()]]

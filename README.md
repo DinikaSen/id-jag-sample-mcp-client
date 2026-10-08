@@ -1,7 +1,7 @@
 # ID-JAG sample MCP client
 
-A small terminal chat client for the Model Context Protocol that demonstrates the
-**ID token** path of gateway-side [Identity Assertion Authorization Grant (ID-JAG)](https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/)
+A small chat client for the Model Context Protocol, with a web UI and a terminal
+mode, that demonstrates the **ID token** path of gateway-side [Identity Assertion Authorization Grant (ID-JAG)](https://datatracker.ietf.org/doc/draft-ietf-oauth-identity-assertion-authz-grant/)
 token exchange, as implemented by the
 [id-jag-token-exchange-policy](https://github.com/DinikaSen/id-jag-token-exchange-policy)
 for the WSO2 AI Gateway.
@@ -77,8 +77,35 @@ the gateway's identity provider client ID there.
 ```bash
 npm install
 cp .env.example .env     # then edit
-npm start
+npm run ui               # web UI on http://localhost:8765
+npm start                # or: terminal mode
 ```
+
+### Web UI
+
+The UI is framed as an internal support assistant: support staff sign in with
+their own identity, chat, and the assistant works the ticketing tools behind the
+gateway on their behalf. It is one page served by the same process on the
+callback port, so no extra build step or port.
+
+1. Open `http://localhost:8765` and click **Sign in**. The page follows the
+   authorization redirect, the identity provider signs you in, and the callback
+   returns you to the page.
+2. The **Session** panel shows the subject, audiences and expiry of the access
+   token and the ID token, and the header the ID token is sent on. The token
+   values are never sent to the browser.
+3. The **Tools** panel lists what the MCP server exposes.
+4. Chat in the **Conversation** pane. Tool calls and their results appear inline
+   and can be expanded.
+5. The **Request trace** panel shows every request to the MCP server with its
+   JSON-RPC method, whether the ID token header was attached, and the status.
+   Hover a 401 to see the gateway's `WWW-Authenticate` value.
+
+The UI binds to `127.0.0.1` only and has no authentication of its own; it is a
+single-user local app. Chat needs `ANTHROPIC_API_KEY`; without it the session,
+tools and trace panels still work.
+
+### Terminal mode
 
 What happens:
 
@@ -100,6 +127,8 @@ What happens:
 /quit                  exit
 ```
 
+Set `NO_BROWSER=1` to print sign-in URLs instead of opening the browser.
+
 ## Configuration
 
 All settings are environment variables, read from `.env` by `npm start`.
@@ -113,14 +142,15 @@ See [.env.example](.env.example) for the full list.
 | `MCP_SCOPES` | Fallback scope when neither the challenge nor the resource metadata names any; default `openid` |
 | `ID_TOKEN_HEADER` | Header carrying the ID token; default `X-ID-Token` |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Chat; optional |
-| `CALLBACK_PORT` | Local port for the redirect URL; default `8765` |
+| `CALLBACK_PORT` | Local port for the redirect URL and the web UI; default `8765` |
 | `LOG_HTTP` | `false` to silence per-request logging |
 
 ## What this client does and does not do
 
 - Tokens live in memory for the lifetime of the process. Nothing is written to disk.
 - The ID token is sent only to `MCP_SERVER_URL`, never to the authorization
-  server traffic the MCP SDK generates, and never logged. Only decoded claims are shown.
+  server traffic the MCP SDK generates, never logged, and never sent to the web
+  UI. Only decoded claims are shown.
 - The ID token is renewed together with the access token. When the gateway
   rejects a request with 401 `invalid_token`, the SDK refreshes, the refresh
   response carries a new ID token, and the request is retried. If the

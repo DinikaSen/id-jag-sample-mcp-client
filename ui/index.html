@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Support Assistant</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --border: #e3e5e8; --text: #1b1f24; --muted: #6b7280;
+    --accent: #2563eb; --accent-text: #ffffff; --user: #e8efff; --ok: #16a34a; --warn: #d97706; --err: #dc2626;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1115; --panel: #171a21; --border: #2a2f3a; --text: #e6e8ec; --muted: #9aa3b2; --user: #1f2a44; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 17px; margin: 0; }
+  header .sub { color: var(--muted); font-size: 13px; }
+  header .spacer { flex: 1; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; background: var(--bg); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.connected { background: var(--ok); } .dot.busy { background: var(--warn); } .dot.error { background: var(--err); }
+  button { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: default; }
+  main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; padding: 16px 20px; min-height: 0; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; overflow: auto; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; min-height: 0; }
+  .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+  .panel h2 .spacer { flex: 1; }
+  .panel h2 button { padding: 3px 10px; font-size: 12px; }
+  #chat { grid-row: span 3; }
+  #messages { flex: 1; overflow: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 80%; padding: 10px 14px; border-radius: 12px; white-space: pre-wrap; word-break: break-word; }
+  .msg.user { align-self: flex-end; background: var(--user); }
+  .msg.assistant { align-self: flex-start; background: var(--bg); }
+  .msg code { font-family: var(--mono); font-size: 13px; background: rgba(127,127,127,.15); padding: 1px 4px; border-radius: 4px; }
+  .tool { align-self: flex-start; max-width: 90%; font-size: 13px; border: 1px dashed var(--border); border-radius: 10px; padding: 6px 12px; color: var(--muted); }
+  .tool summary { cursor: pointer; font-family: var(--mono); }
+  .tool pre { margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; font-size: 12px; color: var(--text); }
+  .tool.error summary { color: var(--err); }
+  .typing { color: var(--muted); font-size: 13px; padding: 0 16px 8px; height: 20px; }
+  .suggestions { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
+  .suggestions button { font-size: 13px; border-radius: 999px; }
+  form { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  textarea { flex: 1; resize: none; font: inherit; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); min-height: 44px; max-height: 160px; }
+  .body { padding: 12px 16px; overflow: auto; font-size: 13px; }
+  dl { margin: 0; display: grid; grid-template-columns: 90px 1fr; gap: 4px 10px; }
+  dt { color: var(--muted); } dd { margin: 0; font-family: var(--mono); font-size: 12px; word-break: break-all; }
+  .aud { display: inline-block; margin: 2px 4px 2px 0; padding: 1px 6px; border: 1px solid var(--border); border-radius: 6px; }
+  .tools-list { list-style: none; margin: 0; padding: 0; }
+  .tools-list li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  .tools-list li:last-child { border-bottom: 0; }
+  .tools-list .name { font-family: var(--mono); font-size: 12px; }
+  .tools-list .desc { color: var(--muted); font-size: 12px; }
+  #trace .body { font-family: var(--mono); font-size: 12px; display: flex; flex-direction: column; gap: 4px; }
+  .tr { display: flex; gap: 8px; align-items: baseline; }
+  .tr .st { min-width: 32px; font-weight: 600; }
+  .tr .st.ok { color: var(--ok); } .tr .st.bad { color: var(--err); } .tr .st.other { color: var(--warn); }
+  .tr .tag { font-size: 10px; padding: 0 5px; border-radius: 4px; background: var(--accent); color: var(--accent-text); }
+  .tr .path { color: var(--muted); word-break: break-all; }
+  .tr.log { color: var(--muted); } .tr.log.error { color: var(--err); } .tr.log.warn { color: var(--warn); }
+  .empty { color: var(--muted); padding: 24px; text-align: center; }
+  .signin { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 24px; text-align: center; }
+  .signin p { color: var(--muted); max-width: 440px; margin: 0; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Support Assistant</h1>
+    <div class="sub">Internal sample · tools via WSO2 AI Gateway · ID-JAG token exchange</div>
+  </div>
+  <div class="spacer"></div>
+  <span class="chip"><span id="dot" class="dot"></span><span id="status-text">Not signed in</span></span>
+  <span id="user" class="chip" hidden></span>
+  <button id="signin" class="primary" hidden>Sign in</button>
+</header>
+<main>
+  <section id="chat" class="panel">
+    <h2>Conversation <span class="spacer"></span><button id="reset" hidden>New chat</button></h2>
+    <div id="messages"></div>
+    <div id="typing" class="typing"></div>
+    <div id="suggestions" class="suggestions" hidden></div>
+    <form id="form">
+      <textarea id="input" rows="1" placeholder="Ask about a customer's tickets…" disabled></textarea>
+      <button id="send" class="primary" type="submit" disabled>Send</button>
+    </form>
+  </section>
+  <section id="session" class="panel">
+    <h2>Session</h2>
+    <div class="body"><div class="empty">Sign in to see the tokens this session uses.</div></div>
+  </section>
+  <section id="tools" class="panel">
+    <h2>Tools</h2>
+    <div class="body"><div class="empty">No tools yet.</div></div>
+  </section>
+  <section id="trace" class="panel">
+    <h2>Request trace <span class="spacer"></span><button id="clear-trace">Clear</button></h2>
+    <div class="body"></div>
+  </section>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const messages = $('messages'), input = $('input'), send = $('send'), form = $('form');
+  const trace = document.querySelector('#trace .body');
+  let status = { state: 'idle' };
+  let pollTimer;
+
+  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fmt = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  function addMessage(role, text) {
+    const el = document.createElement('div');
+    el.className = 'msg ' + role;
+    el.innerHTML = fmt(text);
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+  }
+  function addTool(ev) {
+    const el = document.createElement('details');
+    el.className = 'tool' + (ev.isError ? ' error' : '');
+    const label = ev.type === 'tool_call' ? `⚙ ${ev.name}(${JSON.stringify(ev.args)})` : `${ev.isError ? '✗' : '✓'} ${ev.name} result`;
+    const body = ev.type === 'tool_call' ? JSON.stringify(ev.args, null, 2) : ev.text;
+    el.innerHTML = `<summary>${esc(label)}</summary><pre>${esc(body.length > 4000 ? body.slice(0, 4000) + '\n…' : body)}</pre>`;
+    messages.appendChild(el);
+    messages.scrollTop = messages.scrollHeight;
+  }
+  function addTrace(ev) {
+    const el = document.createElement('div');
+    if (ev.type === 'log') {
+      el.className = 'tr log ' + ev.level;
+      el.textContent = ev.text;
+    } else {
+      el.className = 'tr';
+      const cls = ev.status < 300 ? 'ok' : ev.status === 401 || ev.status >= 500 ? 'bad' : 'other';
+      el.innerHTML = `<span class="st ${cls}">${ev.status}</span><span>${esc(ev.method)}</span>` +
+        (ev.idTokenSent ? `<span class="tag">${esc(status.idTokenHeader || 'ID token')}</span>` : '') +
+        `<span class="path">${esc(ev.rpc ? ev.rpc + ' ' : '')}${esc(ev.path)}</span>`;
+      if (ev.challenge) el.title = ev.challenge;
+    }
+    trace.appendChild(el);
+    trace.scrollTop = trace.scrollHeight;
+  }
+
+  function setBusy(busy) {
+    $('typing').textContent = busy ? 'Working…' : '';
+    input.disabled = busy || status.state !== 'connected' || !status.chatEnabled;
+    send.disabled = input.disabled;
+  }
+
+  function renderStatus() {
+    const s = status;
+    $('dot').className = 'dot ' + (s.state === 'connected' ? 'connected' : s.state === 'error' ? 'error' : s.state === 'idle' ? '' : 'busy');
+    $('status-text').textContent = { idle: 'Not signed in', authorizing: 'Waiting for sign-in…', connecting: 'Connecting…', connected: 'Connected', error: 'Error' }[s.state];
+    $('signin').hidden = !(s.state === 'idle' || s.state === 'error');
+    $('reset').hidden = s.state !== 'connected';
+    const user = $('user');
+    if (s.user) { user.hidden = false; user.textContent = s.user.name || s.user.email || s.user.sub || ''; } else { user.hidden = true; }
+    input.placeholder = s.state !== 'connected' ? 'Sign in to start' : s.chatEnabled ? 'Ask about a customer\'s tickets…' : 'Chat disabled: ANTHROPIC_API_KEY not set. Tools can still be called from the Tools panel.';
+    setBusy(false);
+
+    const session = document.querySelector('#session .body');
+    if (s.tokens && (s.tokens.accessToken || s.tokens.idToken)) {
+      const tok = (label, t) => !t ? '' : t.opaque
+        ? `<dt>${label}</dt><dd>opaque token (${t.length} chars)</dd>`
+        : `<dt>${label}</dt><dd>${esc(String(t.sub || ''))}</dd><dt>audience</dt><dd>${[].concat(t.aud || []).map(a => `<span class="aud">${esc(a)}</span>`).join('')}</dd><dt>expires</dt><dd>${esc(String(t.exp || ''))}</dd>`;
+      session.innerHTML = `<dl>${tok('access token', s.tokens.accessToken)}${tok('ID token', s.tokens.idToken)}<dt>sent on</dt><dd>${esc(s.idTokenHeader)}</dd><dt>MCP server</dt><dd>${esc(s.serverUrl)}</dd><dt>model</dt><dd>${esc(s.model)}</dd></dl>`;
+    } else if (s.state === 'error') {
+      session.innerHTML = `<div class="empty">${esc(s.error || 'failed')}</div>`;
+    }
+
+    const tools = document.querySelector('#tools .body');
+    if (s.tools && s.tools.length) {
+      tools.innerHTML = '<ul class="tools-list">' + s.tools.map(t =>
+        `<li><div class="name">${esc(t.name)}</div><div class="desc">${esc((t.description || '').split('\n')[0])}</div></li>`).join('') + '</ul>';
+    }
+
+    const sug = $('suggestions');
+    sug.hidden = !(s.state === 'connected' && s.chatEnabled && messages.childElementCount === 0);
+    if (!sug.hidden && !sug.childElementCount) {
+      ['Which projects can I see?', 'Show my open tickets', 'Summarize the latest ticket about login problems'].forEach(text => {
+        const b = document.createElement('button'); b.type = 'button'; b.textContent = text;
+        b.onclick = () => { input.value = text; form.requestSubmit(); };
+        sug.appendChild(b);
+      });
+    }
+  }
+
+  async function refresh() {
+    status = await (await fetch('/api/status')).json();
+    if (status.state === 'authorizing' && status.authorizationUrl) {
+      $('status-text').textContent = 'Redirecting to sign-in…';
+      location.href = status.authorizationUrl;
+      return;
+    }
+    renderStatus();
+    clearTimeout(pollTimer);
+    if (status.state === 'authorizing' || status.state === 'connecting') pollTimer = setTimeout(refresh, 1000);
+  }
+
+  $('signin').onclick = async () => { await fetch('/api/signin', { method: 'POST' }); refresh(); };
+  $('reset').onclick = async () => { await fetch('/api/reset', { method: 'POST' }); messages.innerHTML = ''; renderStatus(); };
+  $('clear-trace').onclick = () => { trace.innerHTML = ''; };
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    $('suggestions').hidden = true;
+    addMessage('user', text);
+    setBusy(true);
+    const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: text }) });
+    if (!r.ok) { addMessage('assistant', (await r.json()).error || 'request failed'); setBusy(false); }
+  };
+  input.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } };
+
+  const events = new EventSource('/api/events');
+  events.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    if (ev.type === 'assistant') addMessage('assistant', ev.text);
+    else if (ev.type === 'tool_call' || ev.type === 'tool_result') addTool(ev);
+    else if (ev.type === 'turn_done') setBusy(false);
+    else if (ev.type === 'status') refresh();
+    else addTrace(ev);
+  };
+  refresh();
+})();
+</script>
+</body>
+</html>

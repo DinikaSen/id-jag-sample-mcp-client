@@ -9,9 +9,9 @@ import {
   type OAuthTokens,
 } from '@modelcontextprotocol/sdk/shared/auth.js';
 import type { McpConfig } from './config.js';
-import { CallbackServer } from './callback-server.js';
+import { LocalServer } from './local-server.js';
 import { openInBrowser } from './browser.js';
-import { decodeJwt, describeToken, log } from './log.js';
+import { decodeJwt, describeToken, log, tokenSummary } from './log.js';
 
 /**
  * OAuthClientProvider for the MCP server (gateway). The MCP SDK drives the flow:
@@ -32,7 +32,9 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
 
   constructor(
     private readonly mcp: McpConfig,
-    private readonly callbacks: CallbackServer,
+    private readonly server: LocalServer,
+    /** How to hand the authorization URL to the user; defaults to opening the browser. */
+    private readonly onRedirect: (url: URL) => void = url => openInBrowser(url, 'Sign in to authorize access to the MCP server'),
   ) {
     if (mcp.clientId) {
       this.clientInfo = { client_id: mcp.clientId, client_secret: mcp.clientSecret };
@@ -121,6 +123,14 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
     return this.savedTokens?.id_token;
   }
 
+  /** Claims-only view of both tokens for display. */
+  tokenSummaries(): { accessToken?: Record<string, unknown>; idToken?: Record<string, unknown> } {
+    return {
+      accessToken: this.savedTokens ? tokenSummary(this.savedTokens.access_token) : undefined,
+      idToken: this.savedTokens?.id_token ? tokenSummary(this.savedTokens.id_token) : undefined,
+    };
+  }
+
   idTokenClaims(): Record<string, unknown> | undefined {
     const token = this.idToken();
     return token ? decodeJwt(token)?.payload : undefined;
@@ -134,8 +144,8 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
     if (!this.currentState) {
       throw new Error('authorization redirect requested without a state value');
     }
-    this.pendingCallback = this.callbacks.waitFor('/callback', this.currentState);
-    openInBrowser(url, 'Sign in to authorize access to the MCP server');
+    this.pendingCallback = this.server.waitFor(this.currentState);
+    this.onRedirect(url);
   }
 
   /** The authorization code from the redirect the SDK asked for, once it arrives. */

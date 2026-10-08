@@ -1,10 +1,11 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { loadConfig } from './config.js';
-import { CallbackServer } from './callback-server.js';
-import { GatewayOAuthProvider } from './gateway-auth.js';
-import { McpConnection } from './mcp.js';
-import { Chat } from './chat.js';
+import { LocalServer } from './local-server.js';
+import { App } from './app.js';
+import { registerUiRoutes } from './ui-server.js';
+import { openInBrowser } from './browser.js';
+import { bus } from './events.js';
 import { log, truncate } from './log.js';
 
 const HELP = `commands:
@@ -16,24 +17,31 @@ const HELP = `commands:
 anything else is sent to the model, which may call tools.`;
 
 async function main(): Promise<void> {
+  const uiMode = process.argv.includes('--ui');
   const config = loadConfig();
-  const callbacks = new CallbackServer(config.callbackPort);
-  await callbacks.start();
+  const server = new LocalServer(config.callbackPort, uiMode ? '/' : undefined);
+  await server.start();
 
-  // One sign-in: the SDK discovers the MCP server's authorization server (or uses the
-  // configured override), authorizes with PKCE, and the token response carries both
-  // the access token and the ID token. The ID token is sent on ID_TOKEN_HEADER.
-  const provider = new GatewayOAuthProvider(config.mcp, callbacks);
-  const mcp = new McpConnection(config.mcp, provider, config.logHttp);
-  await mcp.connect();
-
-  const tools = await mcp.listTools();
-  log.ok(`${tools.length} tool(s) available: ${tools.map(t => t.name).join(', ') || 'none'}`);
-
-  const chat = config.chat.apiKey ? new Chat(config.chat.apiKey, config.chat.model, tools, (n, a) => mcp.callTool(n, a)) : undefined;
-  if (!chat) {
-    log.warn('ANTHROPIC_API_KEY is not set; chat is disabled, /call still works');
+  if (uiMode) {
+    // The browser is already the user agent: the UI follows the authorization URL
+    // itself, so no redirect is opened from here.
+    const app = new App(config, server, () => undefined);
+    registerUiRoutes(server, app);
+    openInBrowser(new URL(`http://localhost:${config.callbackPort}/`), 'Web UI');
+    return;
   }
+
+  const app = new App(config, server, url => openInBrowser(url, 'Sign in to authorize access to the MCP server'));
+  bus.onEvent(event => {
+    if (event.type === 'assistant') {
+      log.assistant(event.text);
+    } else if (event.type === 'tool_call') {
+      log.tool(`${event.name}(${JSON.stringify(event.args)})`);
+    } else if (event.type === 'tool_result') {
+      log.tool((event.isError ? 'error: ' : '') + truncate(event.text));
+    }
+  });
+  await app.signIn();
   console.log(HELP);
 
   const rl = createInterface({ input: stdin, output: stdout });
@@ -50,20 +58,18 @@ async function main(): Promise<void> {
       } else if (line === '/help') {
         console.log(HELP);
       } else if (line === '/tools') {
-        for (const tool of tools) {
+        for (const tool of app.listTools()) {
           console.log(`  ${tool.name}${tool.description ? ' ' + log.dim(tool.description.split('\n')[0]) : ''}`);
         }
       } else if (line === '/idtoken') {
-        console.log(JSON.stringify(provider.idTokenClaims() ?? {}, null, 2));
+        console.log(JSON.stringify(app.provider.idTokenClaims() ?? {}, null, 2));
       } else if (line.startsWith('/call ')) {
         const [, name, ...rest] = line.split(' ');
         const args = rest.length ? (JSON.parse(rest.join(' ')) as Record<string, unknown>) : {};
-        const outcome = await mcp.callTool(name, args);
+        const outcome = await app.callTool(name, args);
         console.log((outcome.isError ? 'error: ' : '') + truncate(outcome.text, 4000));
-      } else if (chat) {
-        await chat.turn(line);
       } else {
-        log.warn('chat is disabled; use /call to invoke tools');
+        await app.send(line);
       }
     } catch (err) {
       log.error((err as Error).message);
@@ -72,8 +78,8 @@ async function main(): Promise<void> {
   rl.close();
 
   async function shutdown(): Promise<void> {
-    await mcp.close().catch(() => undefined);
-    callbacks.close();
+    await app.close();
+    server.close();
     process.exit(0);
   }
 }

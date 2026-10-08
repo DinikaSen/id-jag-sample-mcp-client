@@ -1,4 +1,5 @@
 import type { FetchLike } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { bus } from './events.js';
 import { log } from './log.js';
 
 export interface IdTokenFetchOptions {
@@ -24,10 +25,12 @@ export function createIdTokenFetch(options: IdTokenFetchOptions): FetchLike {
     const requestUrl = new URL(url);
     const toMcpServer = requestUrl.origin === target.origin && requestUrl.pathname === target.pathname;
     if (!toMcpServer) {
+      const response = await base(url, init);
       if (options.logHttp) {
-        log.http(`${init?.method ?? 'GET'} ${requestUrl.origin}${requestUrl.pathname} (authorization server)`);
+        log.http(`${init?.method ?? 'GET'} ${requestUrl.origin}${requestUrl.pathname} (authorization server) -> ${response.status}`);
       }
-      return base(url, init);
+      bus.emitEvent({ type: 'http', target: 'auth', method: init?.method ?? 'GET', path: `${requestUrl.origin}${requestUrl.pathname}`, idTokenSent: false, status: response.status });
+      return response;
     }
 
     const headers = new Headers(init?.headers);
@@ -37,13 +40,14 @@ export function createIdTokenFetch(options: IdTokenFetchOptions): FetchLike {
     }
     const response = await base(url, { ...init, headers });
 
+    const method = init?.method ?? 'GET';
+    const rpc = jsonRpcMethod(init?.body);
+    const challenge = response.status === 401 ? (response.headers.get('www-authenticate') ?? '') : undefined;
     if (options.logHttp) {
-      const method = init?.method ?? 'GET';
-      const rpc = jsonRpcMethod(init?.body);
       const sent = idToken ? ` + ${options.headerName}` : '';
-      const challenge = response.status === 401 ? ` WWW-Authenticate: ${response.headers.get('www-authenticate') ?? ''}` : '';
-      log.http(`${method} ${requestUrl.pathname}${rpc ? ' ' + rpc : ''}${sent} -> ${response.status}${challenge}`);
+      log.http(`${method} ${requestUrl.pathname}${rpc ? ' ' + rpc : ''}${sent} -> ${response.status}${challenge !== undefined ? ' WWW-Authenticate: ' + challenge : ''}`);
     }
+    bus.emitEvent({ type: 'http', target: 'mcp', method, path: requestUrl.pathname, rpc, idTokenSent: Boolean(idToken), status: response.status, challenge });
     return response;
   };
 }
