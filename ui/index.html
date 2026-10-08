@@ -161,7 +161,7 @@
     $('reset').hidden = s.state !== 'connected';
     const user = $('user');
     if (s.user) { user.hidden = false; user.textContent = s.user.name || s.user.email || s.user.sub || ''; } else { user.hidden = true; }
-    input.placeholder = s.state !== 'connected' ? 'Sign in to start' : s.chatEnabled ? 'Ask about a customer\'s tickets…' : 'Chat disabled: set LLM_PROXY_URL or ANTHROPIC_API_KEY. Tools can still be called from the Tools panel.';
+    input.placeholder = s.state !== 'connected' ? 'Sign in to start' : s.chatEnabled ? 'Ask about a customer\'s tickets…' : 'Chat disabled: set LLM_PROXY_URL or ANTHROPIC_API_KEY in .env and restart.';
     setBusy(false);
 
     const session = document.querySelector('#session .body');
