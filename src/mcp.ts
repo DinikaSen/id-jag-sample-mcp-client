@@ -28,7 +28,8 @@ export class McpConnection {
 
   async connect(): Promise<void> {
     await this.provider.applyAuthServerOverride();
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    let authorized = false;
+    for (;;) {
       this.transport = new StreamableHTTPClientTransport(this.mcp.serverUrl, {
         authProvider: this.provider,
         fetch: createIdTokenFetch({
@@ -47,12 +48,22 @@ export class McpConnection {
         if (!(err instanceof UnauthorizedError)) {
           throw err;
         }
+        if (authorized) {
+          // One sign-in succeeded and the server still answered 401: signing in again
+          // would only open more browser windows. The last logged WWW-Authenticate
+          // line says why the token was rejected.
+          throw new Error(
+            'the MCP server rejected a freshly issued access token. ' +
+              'If the token was logged as opaque, the authorization server must issue JWT access tokens for this client. ' +
+              'Otherwise check the gateway logs for the policy that rejected it.',
+          );
+        }
         log.info('the MCP server requires authorization; waiting for the browser');
         const code = await this.provider.awaitAuthorizationCode();
         await this.transport.finishAuth(code);
+        authorized = true;
       }
     }
-    throw new Error('could not establish an authorized MCP session');
   }
 
   async listTools(): Promise<Tool[]> {
