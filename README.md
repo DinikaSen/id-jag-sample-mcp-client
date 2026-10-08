@@ -102,7 +102,7 @@ the gateway's identity provider client ID there.
   include `openid`, so that the advertised `scopes_supported` makes every client
   request an ID token. Otherwise this client's `MCP_SCOPES` fallback only applies
   when the metadata advertises no scopes at all.
-- ID-JAG policy attached after it with `assertionType: id_token`,
+- [ID-JAG policy](https://github.com/DinikaSen/id-jag-token-exchange-policy) attached after it with `assertionType: id_token`,
   `idTokenHeader` equal to `ID_TOKEN_HEADER` here, and a `credentialRef` whose
   identity provider client ID is the one you put in the ID token audience above.
 
