@@ -1,0 +1,24 @@
+{
+  "name": "id-jag-sample-mcp-client",
+  "version": "0.1.0",
+  "description": "Sample MCP chat client that signs in at an OpenID Connect identity provider and sends the ID token on a header for gateway-side ID-JAG token exchange",
+  "type": "module",
+  "private": true,
+  "license": "Apache-2.0",
+  "engines": { "node": ">=20.6" },
+  "scripts": {
+    "start": "node --env-file=.env --import tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test src/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.132.1",
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "openid-client": "6.8.8"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.4",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2"
+  }
+}
