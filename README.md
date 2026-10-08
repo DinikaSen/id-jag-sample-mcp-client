@@ -122,6 +122,14 @@ their own identity, chat, and the assistant works the ticketing tools behind the
 gateway on their behalf. It is one page served by the same process on the
 callback port, so no extra build step or port.
 
+![The web UI after a sign-in: a conversation with tool calls on the left; the session's access and ID tokens, the tool list and the request trace on the right](docs/web-ui.png)
+
+The session panel shows both tokens with their audiences, including the
+gateway's client ID that the identity provider was configured to add. The
+request trace shows every call the application makes, tagged with the header
+it carried: `X-ID-Token` for MCP calls through the gateway and `LLM` for model
+calls through the gateway's Anthropic proxy.
+
 1. Open `http://localhost:8765` and click **Sign in**. The page follows the
    authorization redirect, the identity provider signs you in, and the callback
    returns you to the page.
