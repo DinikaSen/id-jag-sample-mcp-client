@@ -11,22 +11,26 @@ function fakeFetch(seen: { url: string; headers: Headers }[]) {
   };
 }
 
-test('adds the ID token header to requests for the MCP server', async () => {
+test('adds the current ID token header to requests for the MCP server', async () => {
   const seen: { url: string; headers: Headers }[] = [];
-  let calls = 0;
+  let current: string | undefined;
   const fetchWithIdToken = createIdTokenFetch({
     serverUrl,
     headerName: 'X-ID-Token',
-    idToken: async () => `id-token-${++calls}`,
+    idToken: () => current,
     baseFetch: fakeFetch(seen),
   });
 
+  await fetchWithIdToken(serverUrl, { method: 'POST', body: '{"method":"initialize"}' });
+  current = 'id-token-1';
   await fetchWithIdToken(serverUrl, { method: 'POST', headers: { Authorization: 'Bearer at' }, body: '{"method":"tools/list"}' });
+  current = 'id-token-2';
   await fetchWithIdToken(serverUrl, { method: 'POST', body: '{"method":"tools/call"}' });
 
-  assert.equal(seen[0].headers.get('x-id-token'), 'id-token-1');
-  assert.equal(seen[0].headers.get('authorization'), 'Bearer at', 'existing headers are kept');
-  assert.equal(seen[1].headers.get('x-id-token'), 'id-token-2', 'the token is fetched fresh per request');
+  assert.equal(seen[0].headers.get('x-id-token'), null, 'no header before sign-in');
+  assert.equal(seen[1].headers.get('x-id-token'), 'id-token-1');
+  assert.equal(seen[1].headers.get('authorization'), 'Bearer at', 'existing headers are kept');
+  assert.equal(seen[2].headers.get('x-id-token'), 'id-token-2', 'the latest token is used per request');
 });
 
 test('leaves authorization server traffic untouched', async () => {
@@ -34,9 +38,7 @@ test('leaves authorization server traffic untouched', async () => {
   const fetchWithIdToken = createIdTokenFetch({
     serverUrl,
     headerName: 'X-ID-Token',
-    idToken: async () => {
-      throw new Error('must not be called for non-MCP requests');
-    },
+    idToken: () => 'id-token',
     baseFetch: fakeFetch(seen),
   });
 

@@ -5,8 +5,8 @@ export interface IdTokenFetchOptions {
   /** The MCP server URL. Only requests to exactly this origin and path get the header. */
   serverUrl: URL;
   headerName: string;
-  /** Supplies a currently valid ID token; called once per MCP request. */
-  idToken: () => Promise<string>;
+  /** The current ID token, or undefined before the sign-in has completed. */
+  idToken: () => string | undefined;
   logHttp?: boolean;
   baseFetch?: FetchLike;
 }
@@ -31,14 +31,18 @@ export function createIdTokenFetch(options: IdTokenFetchOptions): FetchLike {
     }
 
     const headers = new Headers(init?.headers);
-    headers.set(options.headerName, await options.idToken());
+    const idToken = options.idToken();
+    if (idToken) {
+      headers.set(options.headerName, idToken);
+    }
     const response = await base(url, { ...init, headers });
 
     if (options.logHttp) {
       const method = init?.method ?? 'GET';
       const rpc = jsonRpcMethod(init?.body);
+      const sent = idToken ? ` + ${options.headerName}` : '';
       const challenge = response.status === 401 ? ` WWW-Authenticate: ${response.headers.get('www-authenticate') ?? ''}` : '';
-      log.http(`${method} ${requestUrl.pathname}${rpc ? ' ' + rpc : ''} + ${options.headerName} -> ${response.status}${challenge}`);
+      log.http(`${method} ${requestUrl.pathname}${rpc ? ' ' + rpc : ''}${sent} -> ${response.status}${challenge}`);
     }
     return response;
   };

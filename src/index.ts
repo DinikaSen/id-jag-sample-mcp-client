@@ -2,7 +2,6 @@ import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { loadConfig } from './config.js';
 import { CallbackServer } from './callback-server.js';
-import { IdentityProviderSession } from './idp.js';
 import { GatewayOAuthProvider } from './gateway-auth.js';
 import { McpConnection } from './mcp.js';
 import { Chat } from './chat.js';
@@ -21,14 +20,11 @@ async function main(): Promise<void> {
   const callbacks = new CallbackServer(config.callbackPort);
   await callbacks.start();
 
-  // 1. Sign in at the identity provider. The ID token from here goes on the header.
-  const idp = new IdentityProviderSession(config.idp, callbacks);
-  await idp.discover();
-  await idp.signIn();
-
-  // 2. Authorize at the MCP server. The SDK discovers its authorization server itself.
+  // One sign-in: the SDK discovers the MCP server's authorization server (or uses the
+  // configured override), authorizes with PKCE, and the token response carries both
+  // the access token and the ID token. The ID token is sent on ID_TOKEN_HEADER.
   const provider = new GatewayOAuthProvider(config.mcp, callbacks);
-  const mcp = new McpConnection(config.mcp, idp, provider, config.logHttp);
+  const mcp = new McpConnection(config.mcp, provider, config.logHttp);
   await mcp.connect();
 
   const tools = await mcp.listTools();
@@ -58,7 +54,7 @@ async function main(): Promise<void> {
           console.log(`  ${tool.name}${tool.description ? ' ' + log.dim(tool.description.split('\n')[0]) : ''}`);
         }
       } else if (line === '/idtoken') {
-        console.log(JSON.stringify(idp.claims() ?? {}, null, 2));
+        console.log(JSON.stringify(provider.idTokenClaims() ?? {}, null, 2));
       } else if (line.startsWith('/call ')) {
         const [, name, ...rest] = line.split(' ');
         const args = rest.length ? (JSON.parse(rest.join(' ')) as Record<string, unknown>) : {};

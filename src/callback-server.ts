@@ -8,12 +8,8 @@ interface Pending {
 }
 
 /**
- * One local HTTP listener that receives both redirect callbacks:
- *   /idp/callback  - the OpenID Connect sign-in at the identity provider
- *   /mcp/callback  - the OAuth authorization at the MCP server's authorization server
- *
- * Each pending flow is keyed by path and matched on `state` so a stray callback
- * cannot complete the wrong flow.
+ * Local HTTP listener for the OAuth redirect: /callback on the configured port.
+ * The pending flow is matched on `state` so a stray callback cannot complete it.
  */
 export class CallbackServer {
   private server?: Server;

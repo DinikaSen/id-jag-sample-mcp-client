@@ -5,7 +5,6 @@ import type { Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { McpConfig } from './config.js';
 import { GatewayOAuthProvider } from './gateway-auth.js';
 import { createIdTokenFetch } from './id-token-fetch.js';
-import { IdentityProviderSession } from './idp.js';
 import { log } from './log.js';
 
 export interface ToolCallOutcome {
@@ -14,8 +13,8 @@ export interface ToolCallOutcome {
 }
 
 /**
- * The MCP session with the gateway. The gateway access token is handled by the SDK
- * through GatewayOAuthProvider; the ID token is attached by the fetch wrapper.
+ * The MCP session with the gateway. The access token is handled by the SDK through
+ * GatewayOAuthProvider; the ID token from the same sign-in is attached by the fetch wrapper.
  */
 export class McpConnection {
   private client?: Client;
@@ -23,19 +22,19 @@ export class McpConnection {
 
   constructor(
     private readonly mcp: McpConfig,
-    private readonly idp: IdentityProviderSession,
     private readonly provider: GatewayOAuthProvider,
     private readonly logHttp: boolean,
   ) {}
 
   async connect(): Promise<void> {
+    await this.provider.applyAuthServerOverride();
     for (let attempt = 1; attempt <= 3; attempt++) {
       this.transport = new StreamableHTTPClientTransport(this.mcp.serverUrl, {
         authProvider: this.provider,
         fetch: createIdTokenFetch({
           serverUrl: this.mcp.serverUrl,
           headerName: this.mcp.idTokenHeader,
-          idToken: () => this.idp.currentIdToken(),
+          idToken: () => this.provider.idToken(),
           logHttp: this.logHttp,
         }),
       });
