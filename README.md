@@ -41,7 +41,7 @@ sequenceDiagram
     B->>C: Callback with code
     C->>I: POST /token (authorization_code + code_verifier)
     I-->>C: access_token, refresh_token, id_token<br/>(ID token aud includes the gateway's IdP client ID)
-    C->>C: SDK stores the tokens; the app keeps the id_token
+    C->>C: SDK stores the tokens and the app keeps the id_token
 
     loop every MCP request
         C->>G: POST /mcp with Authorization: Bearer <access token><br/>and X-ID-Token: <ID token>
