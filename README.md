@@ -84,7 +84,7 @@ registration is enabled:
 | Setting | Value |
 |---|---|
 | Client type | Public (PKCE only) or confidential; both work |
-| Grant types | `authorization_code`, `refresh_token` |
+| Grant types | `authorization_code`. Optionally `refresh_token`: with it the SDK renews expired tokens silently, and the ID token with them; without it an expired session goes back through the sign-in page |
 | Redirect URL | `http://localhost:8765/callback` (port from `CALLBACK_PORT`) |
 | Scopes | `openid`, plus whatever the MCP server requires |
 | **ID token audience** | **Must include the client ID the gateway uses at this identity provider** |
