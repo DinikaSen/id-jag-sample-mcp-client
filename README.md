@@ -19,14 +19,47 @@ ID token at the identity provider for an ID-JAG, presents it to the upstream MCP
 server's authorization server, and forwards the request with the resulting
 access token. The client never sees any upstream credential.
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant C as This client<br/>(MCP SDK + fetch wrapper)
+    participant G as WSO2 AI Gateway<br/>(MCP Authentication + ID-JAG policy)
+    participant I as Identity Provider<br/>(e.g. WSO2 Identity Server)
+    participant R as Resource Authorization Server<br/>(e.g. Atlassian)
+    participant U as Upstream MCP server<br/>(e.g. Atlassian MCP)
+
+    C->>G: POST /mcp initialize (no token)
+    G-->>C: 401 WWW-Authenticate: Bearer resource_metadata=..., scope="... openid"
+    C->>G: GET /.well-known/oauth-protected-resource
+    G-->>C: authorization_servers, scopes_supported (includes openid)
+    C->>I: GET authorization server metadata<br/>(MCP_AUTH_SERVER_METADATA_URL takes precedence when set)
+    I-->>C: authorization and token endpoints
+    C->>B: Open /authorize (PKCE, state, scope includes openid)
+    B->>I: Sign in
+    I-->>B: 302 http://localhost:8765/callback?code=...
+    B->>C: Callback with code
+    C->>I: POST /token (authorization_code + code_verifier)
+    I-->>C: access_token, refresh_token, id_token<br/>(ID token aud includes the gateway's IdP client ID)
+    C->>C: SDK stores the tokens; the app keeps the id_token
+
+    loop every MCP request
+        C->>G: POST /mcp with Authorization: Bearer <access token><br/>and X-ID-Token: <ID token>
+        G->>G: MCP Authentication validates the access token
+        G->>I: Step 1: token exchange, subject_token = ID token
+        I-->>G: ID-JAG
+        G->>R: Step 2: JWT-bearer grant, assertion = ID-JAG
+        R-->>G: Resource AS access token
+        G->>U: Request with the Resource AS access token, X-ID-Token removed
+        U-->>G: Response
+        G-->>C: Response
+    end
 ```
-MCP client ──(Authorization: Bearer <access token>, X-ID-Token: <ID token>)──▶ WSO2 AI Gateway
-                                                                              │ 1. MCP Authentication validates the access token
-                                                                              │ 2. ID-JAG policy: ID token ─▶ IdP ─▶ ID-JAG
-                                                                              │ 3. ID-JAG ─▶ Resource AS ─▶ upstream access token
-                                                                              ▼
-                                                                       upstream MCP server
-```
+
+Steps 1 to 13 are the standard MCP authorization flow, driven entirely by the
+SDK; the only choice the client makes is to ask for `openid`. Steps 15 to 21
+happen inside the gateway and are described in the policy's README. The
+client's own code adds one header (step 14) and keeps one token (step 13).
 
 Built on the official [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 and the [Anthropic SDK](https://github.com/anthropics/anthropic-sdk-typescript).
