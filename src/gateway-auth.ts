@@ -35,6 +35,7 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
   private verifier?: string;
   private currentState?: string;
   private pendingCallback?: Promise<URL>;
+  private pendingUrl?: URL;
   private discovery?: OAuthDiscoveryState;
 
   constructor(
@@ -143,27 +144,35 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
   }
 
   /**
-   * Registers the callback wait before the browser opens, so a fast sign-in
-   * cannot arrive before anyone is listening for it.
+   * The SDK calls this whenever its auth flow decides a sign-in is needed, including
+   * from paths nobody awaits (a 401 on the optional GET stream). So the browser is
+   * not sent anywhere here: the URL and the callback wait are kept until the app
+   * asks for the code in awaitAuthorizationCode, which is when a sign-in is wanted.
    */
   redirectToAuthorization(url: URL): void {
     if (!this.currentState) {
       throw new Error('authorization redirect requested without a state value');
     }
-    this.pendingCallback = this.server.waitFor(this.currentState);
-    (this.hooks.onRedirect ?? (u => openInBrowser(u, 'Sign in to authorize access to the MCP server')))(url);
+    const pending = this.server.waitFor(this.currentState);
+    // A wait nobody collects must not become an unhandled rejection when it times out.
+    pending.catch(() => undefined);
+    this.pendingCallback = pending;
+    this.pendingUrl = url;
   }
 
-  /** The authorization code from the redirect the SDK asked for, once it arrives. */
+  /** Hands the user to the sign-in page and returns the authorization code it sends back. */
   async awaitAuthorizationCode(): Promise<string> {
     const pending = this.pendingCallback;
-    if (!pending) {
+    const url = this.pendingUrl;
+    if (!pending || !url) {
       throw new Error('no authorization redirect is pending');
     }
     this.pendingCallback = undefined;
-    const url = await pending;
+    this.pendingUrl = undefined;
+    (this.hooks.onRedirect ?? (u => openInBrowser(u, 'Sign in to authorize access to the MCP server')))(url);
+    const callback = await pending;
     this.hooks.onCallback?.();
-    const code = url.searchParams.get('code');
+    const code = callback.searchParams.get('code');
     if (!code) {
       throw new Error('the authorization callback carried no code');
     }

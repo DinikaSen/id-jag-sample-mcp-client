@@ -190,9 +190,14 @@
     }
   }
 
+  let redirecting = false;
   async function refresh() {
-    status = await (await fetch('/api/status')).json();
+    const next = await (await fetch('/api/status')).json();
+    if (redirecting) return;
+    status = next;
     if (status.state === 'authorizing' && status.authorizationUrl) {
+      // One navigation only: a poll and a status event can both land here.
+      redirecting = true;
       $('status-text').textContent = 'Redirecting to sign-in…';
       location.href = status.authorizationUrl;
       return;

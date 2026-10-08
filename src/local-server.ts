@@ -59,11 +59,7 @@ export class LocalServer {
   /** Resolves with the full callback URL once the browser is redirected back. */
   waitFor(state: string, timeoutMs = 5 * 60 * 1000): Promise<URL> {
     return new Promise<URL>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending = undefined;
-        reject(new Error('timed out waiting for the browser callback'));
-      }, timeoutMs);
-      this.pending = {
+      const entry: Pending = {
         state,
         resolve: url => {
           clearTimeout(timer);
@@ -74,6 +70,14 @@ export class LocalServer {
           reject(err);
         },
       };
+      const timer = setTimeout(() => {
+        // Only drop the wait this timer belongs to; a newer flow may have replaced it.
+        if (this.pending === entry) {
+          this.pending = undefined;
+        }
+        reject(new Error('timed out waiting for the browser callback'));
+      }, timeoutMs);
+      this.pending = entry;
     });
   }
 

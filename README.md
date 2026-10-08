@@ -167,6 +167,7 @@ See [.env.example](.env.example) for the full list.
 | Gateway 401 `invalid_token` on every request after a successful sign-in | The identity provider rejected the exchange. Check the ID token audience includes the gateway's client ID, and the gateway's logs for the step that failed |
 | Gateway 502 | The exchange with the upstream authorization server failed; see gateway logs |
 | `State mismatch` in the browser | A stale callback from an earlier run; retry the sign-in |
+| `GET ... -> 401` with an empty `WWW-Authenticate` in the trace | The upstream MCP server does not offer the optional server-to-client stream and answers the SDK's GET with a bare 401. The client reports it as "stream not offered" so the SDK does not start a second sign-in; the gateway could answer 405 for that GET instead |
 | Self-signed TLS at the identity provider or gateway | Set `NODE_EXTRA_CA_CERTS` to the CA bundle |
 
 ## Development

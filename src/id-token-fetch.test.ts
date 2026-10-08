@@ -50,3 +50,21 @@ test('leaves authorization server traffic untouched', async () => {
     assert.equal(request.headers.get('x-id-token'), null, request.url);
   }
 });
+
+test('turns a challenge-less 401 on the GET stream into 405 so the SDK does not start a sign-in', async () => {
+  const fetchWithIdToken = createIdTokenFetch({
+    serverUrl,
+    headerName: 'X-ID-Token',
+    idToken: () => 'id-token',
+    baseFetch: async (_url, init) =>
+      init?.method === 'GET'
+        ? new Response('', { status: 401 })
+        : new Response('', { status: 401, headers: { 'WWW-Authenticate': 'Bearer error="invalid_token"' } }),
+  });
+
+  const stream = await fetchWithIdToken(serverUrl, { method: 'GET', headers: { Accept: 'text/event-stream' } });
+  assert.equal(stream.status, 405);
+
+  const rpc = await fetchWithIdToken(serverUrl, { method: 'POST', body: '{"method":"tools/list"}' });
+  assert.equal(rpc.status, 401, 'a real challenge still reaches the SDK');
+});

@@ -48,6 +48,16 @@ export function createIdTokenFetch(options: IdTokenFetchOptions): FetchLike {
       log.http(`${method} ${requestUrl.pathname}${rpc ? ' ' + rpc : ''}${sent} -> ${response.status}${challenge !== undefined ? ' WWW-Authenticate: ' + challenge : ''}`);
     }
     bus.emitEvent({ type: 'http', target: 'mcp', method, path: requestUrl.pathname, rpc, idTokenSent: Boolean(idToken), status: response.status, challenge });
+
+    if (method === 'GET' && response.status === 401 && !challenge) {
+      // The SDK's optional server-to-client stream. A 401 without a challenge comes from
+      // behind the gateway, not from its authentication, and the SDK would answer it by
+      // starting a new sign-in that nothing awaits. Present it as 405, the SDK's signal
+      // for "no stream offered", which it accepts quietly.
+      log.warn(`the server answered the GET stream with 401 and no WWW-Authenticate; treating it as "stream not offered" (405)`);
+      await response.body?.cancel();
+      return new Response(null, { status: 405, statusText: 'Method Not Allowed', headers: { Allow: 'POST' } });
+    }
     return response;
   };
 }
