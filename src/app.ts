@@ -41,10 +41,18 @@ export class App {
     server: LocalServer,
     onRedirect?: (url: URL) => void,
   ) {
-    this.provider = new GatewayOAuthProvider(config.mcp, server, url => {
-      this.authorizationUrl = url.toString();
-      this.setState('authorizing');
-      onRedirect?.(url);
+    this.provider = new GatewayOAuthProvider(config.mcp, server, {
+      onRedirect: url => {
+        this.authorizationUrl = url.toString();
+        this.setState('authorizing');
+        onRedirect?.(url);
+      },
+      onCallback: () => {
+        // The browser is back; the page must not follow the stale authorization URL
+        // while the code is exchanged and the session is set up.
+        this.authorizationUrl = undefined;
+        this.setState('connecting');
+      },
     });
     this.mcp = new McpConnection(config.mcp, this.provider, config.logHttp);
   }
@@ -58,8 +66,6 @@ export class App {
     this.setState('connecting');
     try {
       await this.mcp.connect();
-      this.authorizationUrl = undefined;
-      this.setState('connecting');
       this.tools = await this.mcp.listTools();
       log.ok(`${this.tools.length} tool(s) available: ${this.tools.map(t => t.name).join(', ') || 'none'}`);
       if (this.config.chat.apiKey) {

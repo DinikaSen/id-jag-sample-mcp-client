@@ -13,6 +13,13 @@ import { LocalServer } from './local-server.js';
 import { openInBrowser } from './browser.js';
 import { decodeJwt, describeToken, log, tokenSummary } from './log.js';
 
+export interface ProviderHooks {
+  /** How to hand the authorization URL to the user; defaults to opening the browser. */
+  onRedirect?: (url: URL) => void;
+  /** Called as soon as the browser is redirected back, before the code is exchanged. */
+  onCallback?: () => void;
+}
+
 /**
  * OAuthClientProvider for the MCP server (gateway). The MCP SDK drives the flow:
  * protected resource metadata discovery, authorization server metadata, dynamic
@@ -33,8 +40,7 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
   constructor(
     private readonly mcp: McpConfig,
     private readonly server: LocalServer,
-    /** How to hand the authorization URL to the user; defaults to opening the browser. */
-    private readonly onRedirect: (url: URL) => void = url => openInBrowser(url, 'Sign in to authorize access to the MCP server'),
+    private readonly hooks: ProviderHooks = {},
   ) {
     if (mcp.clientId) {
       this.clientInfo = { client_id: mcp.clientId, client_secret: mcp.clientSecret };
@@ -145,7 +151,7 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
       throw new Error('authorization redirect requested without a state value');
     }
     this.pendingCallback = this.server.waitFor(this.currentState);
-    this.onRedirect(url);
+    (this.hooks.onRedirect ?? (u => openInBrowser(u, 'Sign in to authorize access to the MCP server')))(url);
   }
 
   /** The authorization code from the redirect the SDK asked for, once it arrives. */
@@ -156,6 +162,7 @@ export class GatewayOAuthProvider implements OAuthClientProvider {
     }
     this.pendingCallback = undefined;
     const url = await pending;
+    this.hooks.onCallback?.();
     const code = url.searchParams.get('code');
     if (!code) {
       throw new Error('the authorization callback carried no code');

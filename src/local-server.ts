@@ -99,12 +99,12 @@ export class LocalServer {
       pending.reject(new Error(`authorization failed: ${error} ${description}`.trim()));
       return;
     }
+    pending.resolve(url);
     if (this.afterCallback) {
       res.writeHead(302, { Location: this.afterCallback }).end();
     } else {
       res.writeHead(200, { 'Content-Type': 'text/html' }).end(page('Signed in', 'You can close this window and return to the terminal.'));
     }
-    pending.resolve(url);
   }
 }
 
